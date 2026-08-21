@@ -21,6 +21,50 @@ function favicon () {
   return utils.extractFilename(config.get('application.favicon'))
 }
 
+function safeEvaluate (code: string): string {
+  const firstChar = code[0]
+  if (firstChar === "'" || firstChar === '"' || firstChar === '`') {
+    let unescaped = ''
+    for (let i = 1; i < code.length; i++) {
+      if (code[i] === '\\') {
+        if (i === code.length - 1) {
+          throw new Error('Invalid escape at end of string')
+        }
+        const nextChar = code[i + 1]
+        if (nextChar === 'n') {
+          unescaped += '\n'
+        } else if (nextChar === 'r') {
+          unescaped += '\r'
+        } else if (nextChar === 't') {
+          unescaped += '\t'
+        } else {
+          unescaped += nextChar
+        }
+        i++ // Skip the escaped character
+      } else if (code[i] === firstChar) {
+        if (i === code.length - 1) {
+          return unescaped
+        } else {
+          throw new Error('String literal closed before end of string')
+        }
+      } else {
+        unescaped += code[i]
+      }
+    }
+    throw new Error('Unterminated string literal')
+  }
+
+  if (/^\d+(\.\d+)?$/.test(code)) {
+    return String(Number(code))
+  }
+
+  if (code === 'true') return 'true'
+  if (code === 'false') return 'false'
+  if (code === 'null') return 'null'
+
+  throw new Error('Unsupported expression')
+}
+
 export function getUserProfile () {
   return async (req: Request, res: Response, next: NextFunction) => {
     let template: string
@@ -58,7 +102,7 @@ export function getUserProfile () {
         if (!code) {
           throw new Error('Username is null')
         }
-        username = eval(code) // eslint-disable-line no-eval
+        username = safeEvaluate(code)
       } catch (err) {
         username = '\\' + username
       }
