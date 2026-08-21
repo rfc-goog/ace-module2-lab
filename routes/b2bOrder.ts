@@ -21,12 +21,30 @@ export function b2bOrder () {
         return next(new Error('Invalid input'))
       }
 
-      const containsBlocked = /\b(this|process|require|exec|spawn|Function|eval|global|window|document|import|Reflect|Object|Proxy|Symbol|setTimeout|setInterval|arguments|caller|callee)\b/i.test(orderLinesData) ||
+      // 1. If it's a valid JSON, parse it safely and completely bypass safeEval/vm!
+      let isValidJson = false
+      try {
+        JSON.parse(orderLinesData)
+        isValidJson = true
+      } catch (err) {
+        // Not valid JSON, which is fine, might be a challenge solver or broken input
+      }
+
+      if (isValidJson) {
+        res.json({ cid: body.cid, orderNo: uniqueOrderNumber(), paymentDue: dateTwoWeeksFromNow() })
+        return
+      }
+
+      // 2. If it's not valid JSON, check for blocked patterns.
+      // We block any property access using brackets or backticks, or any dangerous keywords.
+      const containsBlocked = /\b(this|process|require|exec|spawn|Function|eval|global|globalThis|window|document|import|Reflect|Object|Proxy|Symbol|setTimeout|setInterval|arguments|caller|callee)\b/i.test(orderLinesData) ||
         /constructor|__proto__|prototype|child_process/i.test(orderLinesData)
       const containsBackslash = orderLinesData.includes('\\')
-      const containsBracketLetters = /\[[^\]]*[a-zA-Z][^\]]*\]/.test(orderLinesData)
+      
+      // If the input is not JSON, we forbid any brackets [ ] or backticks ` `
+      const containsForbiddenChars = /[\[\]`]/.test(orderLinesData)
 
-      if (containsBlocked || containsBackslash || containsBracketLetters) {
+      if (containsBlocked || containsBackslash || containsForbiddenChars) {
         return next(new Error('Blocked malicious input'))
       }
 
